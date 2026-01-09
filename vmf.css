@@ -1,4 +1,4 @@
-/* VMF assets v0.1.2 */
+/* VMF assets v0.2.0 */
 .vmf-asset-badge{
   position:fixed;
   left:12px;
@@ -12,4 +12,45 @@
   box-shadow:0 6px 24px rgba(0,0,0,.25);
   opacity:.92;
   pointer-events:none;
+}
+
+/* VMF CSS v2026-01-06 GATE1-FIX16 */
+#vmf-cta-bar { display: none !important; }
+
+@media (max-width: 820px) {
+  /* Hide dark mode / moon toggles */
+  .c27-dark-mode,
+  .c27-theme-switcher,
+  .theme-switcher,
+  .header-theme-switcher,
+  .c27-theme-switcher-wrapper,
+  .c27-header__dark-mode,
+  button[aria-label*="dark" i],
+  a[aria-label*="dark" i],
+  button[title*="dark" i],
+  a[title*="dark" i],
+  button[class*="dark" i],
+  a[class*="dark" i] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* Hide Order By / Latest controls in mobile explore */
+  .c27-orderby,
+  .orderby,
+  .sort-by,
+  .c27-explore-head .orderby,
+  .c27-explore-head .c27-orderby,
+  .c27-explore-filters .orderby,
+  .c27-explore-filters .c27-orderby,
+  .c27-explore-filters select[name="orderby"],
+  .c27-explore-filters select[name*="order"],
+  .c27-explore-filters select[name*="sort"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
 }
