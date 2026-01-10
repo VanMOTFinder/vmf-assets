@@ -1,14 +1,15 @@
-/* VMF assets v0.2.5 - Geographic-Based Proximity */
+/* VMF assets v0.2.6 - Intercept Autocomplete */
 (() => {
-  const v = "v0.2.5";
+  const v = "v0.2.6";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
     const qs = new URLSearchParams(location.search || "");
     const hash = (location.hash || "");
-    const hasDebugParam = qs.get("vmf_debug") === "1" || hash.includes("vmf_debug=1");
-    if (hasDebugParam) localStorage.setItem("vmf_debug", "1");
-    if (hasDebugParam || localStorage.getItem("vmf_debug") === "1") {
+    if (qs.get("vmf_debug") === "1" || hash.includes("vmf_debug=1")) {
+      localStorage.setItem("vmf_debug", "1");
+    }
+    if (localStorage.getItem("vmf_debug") === "1") {
       const el = document.createElement("div");
       el.className = "vmf-asset-badge";
       el.textContent = `VMF assets ${v}`;
@@ -17,27 +18,19 @@
   } catch (_) {}
 })();
 
-/*! VMF-AUTOHOOK v0.2.5
-    Geographic-based proximity policy
-    
-    PROXIMITY BY GEOGRAPHIC COVERAGE:
-    - Full postcode: 3mi (street-level, want nearest)
-    - Outcode: 5mi (postal district ~5 sq mi urban avg)
-    - Town (<200k): 8mi (typical town diameter)
-    - Small city (200k-400k): 10mi (~20-50 sq mi)
-    - Large city (400k-700k): 12mi (~50-150 sq mi)
-    - Major city (700k+): 15mi (Leeds, Birmingham ~80-100 sq mi)
-    - Greater metro / Region: 20mi (practical cap)
+/*! VMF-AUTOHOOK v0.2.6
+    Intercepts autocomplete selection and sets proximity slider
+    BEFORE MyListing's AJAX search fires
 */
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.2.5';
+  var VERSION = 'VMF-AUTOHOOK v0.2.6';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK initializing:', VERSION);
 
-  // ============ PROXIMITY POLICY (GEOGRAPHIC) ============
+  // ============ PROXIMITY POLICY ============
   var POLICY = {
     FULL_POSTCODE: 3,
     OUTCODE: 5,
@@ -49,140 +42,35 @@
   };
 
   // ============ UK LOCATION DATA ============
-  
-  // Greater Metros - 20mi cap (massive sprawl, 200+ sq mi)
-  var GREATER_METROS = [
-    'greater london', 'london', 'central london',
-    'greater manchester',
-    'west midlands',
-    'west yorkshire',
-    'merseyside',
-    'south yorkshire',
-    'tyneside', 'tyne and wear'
-  ];
-  
-  // Major Cities - 15mi (700k+ pop, ~80-150 sq mi)
-  var MAJOR_CITIES = [
-    'birmingham',    // 1.1M, ~103 sq mi
-    'glasgow',       // 620k, ~68 sq mi (but dense)
-    'leeds',         // 536k, ~85 sq mi
-    'liverpool',     // 486k, ~43 sq mi
-    'sheffield',     // 480k, ~142 sq mi
-    'manchester',    // 473k, ~116 sq mi
-    'edinburgh',     // 512k, ~101 sq mi
-    'bristol'        // 467k, ~43 sq mi
-  ];
-  
-  // Large Cities - 12mi (400k-700k pop, ~50-100 sq mi)
-  var LARGE_CITIES = [
-    'leicester', 'coventry', 'cardiff', 'belfast',
-    'nottingham', 'newcastle', 'newcastle upon tyne',
-    'southampton', 'portsmouth', 'plymouth', 'brighton',
-    'wolverhampton', 'stoke', 'stoke-on-trent', 'derby',
-    'swansea', 'aberdeen', 'dundee'
-  ];
-  
-  // Small Cities - 10mi (200k-400k pop, ~20-50 sq mi)
-  var SMALL_CITIES = [
-    'reading', 'luton', 'milton keynes', 'northampton',
-    'peterborough', 'cambridge', 'oxford', 'ipswich', 'norwich',
-    'hull', 'kingston upon hull', 'middlesbrough', 'bolton',
-    'sunderland', 'warrington', 'stockport', 'york',
-    'blackpool', 'preston', 'blackburn', 'burnley',
-    'wakefield', 'barnsley', 'doncaster', 'rotherham',
-    'wigan', 'oldham', 'rochdale', 'salford',
-    'dudley', 'walsall', 'wolverhampton'
-  ];
-  
-  // Regions/Counties - 20mi cap
-  var REGIONS = [
-    'yorkshire', 'lancashire', 'cheshire', 'derbyshire', 'nottinghamshire',
-    'leicestershire', 'northamptonshire', 'warwickshire', 'staffordshire',
-    'kent', 'essex', 'sussex', 'surrey', 'hampshire', 'berkshire',
-    'devon', 'cornwall', 'somerset', 'dorset', 'wiltshire',
-    'norfolk', 'suffolk', 'cambridgeshire',
-    'northumberland', 'durham', 'cumbria',
-    'wales', 'scotland', 'northern ireland',
-    'shire', 'county', 'region'
-  ];
+  var GREATER_METROS = ['greater london', 'london', 'central london', 'greater manchester', 'west midlands', 'west yorkshire', 'merseyside', 'south yorkshire', 'tyneside', 'tyne and wear'];
+  var MAJOR_CITIES = ['birmingham', 'glasgow', 'leeds', 'liverpool', 'sheffield', 'manchester', 'edinburgh', 'bristol'];
+  var LARGE_CITIES = ['leicester', 'coventry', 'cardiff', 'belfast', 'nottingham', 'newcastle', 'newcastle upon tyne', 'southampton', 'portsmouth', 'plymouth', 'brighton', 'wolverhampton', 'stoke', 'stoke-on-trent', 'derby', 'swansea', 'aberdeen', 'dundee'];
+  var SMALL_CITIES = ['reading', 'luton', 'milton keynes', 'northampton', 'peterborough', 'cambridge', 'oxford', 'ipswich', 'norwich', 'hull', 'kingston upon hull', 'middlesbrough', 'bolton', 'sunderland', 'warrington', 'stockport', 'york', 'blackpool', 'preston', 'blackburn', 'burnley', 'wakefield', 'barnsley', 'doncaster', 'rotherham', 'wigan', 'oldham', 'rochdale', 'salford', 'dudley', 'walsall'];
+  var REGIONS = ['yorkshire', 'lancashire', 'cheshire', 'derbyshire', 'nottinghamshire', 'leicestershire', 'northamptonshire', 'warwickshire', 'staffordshire', 'kent', 'essex', 'sussex', 'surrey', 'hampshire', 'berkshire', 'devon', 'cornwall', 'somerset', 'dorset', 'wiltshire', 'norfolk', 'suffolk', 'cambridgeshire', 'northumberland', 'durham', 'cumbria', 'wales', 'scotland', 'northern ireland', 'shire', 'county', 'region'];
 
-  // ============ UTILS ============
-  function $(sel) { try { return document.querySelector(sel); } catch (_) { return null; } }
-  function $all(sel) { try { return Array.prototype.slice.call(document.querySelectorAll(sel)); } catch (_) { return []; } }
-
-  function getQS() {
-    try { return new URLSearchParams(window.location.search || ''); }
-    catch (_) { return new URLSearchParams(''); }
-  }
-
-  function setQS(qs) {
-    return window.location.origin + window.location.pathname + 
-           (qs.toString() ? '?' + qs.toString() : '') + 
-           (window.location.hash || '');
-  }
-
-  function normalize(s) {
-    return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
-  }
-
-  function isExplore() {
-    var path = window.location.pathname.toLowerCase();
-    if (path.indexOf('/van-mot-garage') > -1) return true;
-    var qs = getQS();
-    if (qs.get('lat') || qs.get('lng') || qs.get('location') || qs.get('region')) return true;
-    return false;
-  }
-
-  // ============ LOCATION DETECTION ============
-  
-  function isFullPostcode(s) {
-    return /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(normalize(s).toUpperCase());
-  }
-
-  function isOutcode(s) {
-    return /^[A-Z]{1,2}\d[A-Z\d]?$/i.test(normalize(s).toUpperCase());
-  }
-
-  function matchesList(loc, list) {
+  // ============ DETECTION ============
+  function normalize(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function isFullPostcode(s) { return /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(s); }
+  function isOutcode(s) { return /^[A-Z]{1,2}\d[A-Z\d]?$/i.test(normalize(s).toUpperCase()); }
+  function inList(loc, list) {
     loc = normalize(loc);
     for (var i = 0; i < list.length; i++) {
-      if (loc === list[i] || loc.indexOf(list[i]) === 0) {
-        console.log('[VMF] Match:', loc, '→', list[i]);
-        return true;
-      }
+      if (loc === list[i] || loc.indexOf(list[i]) === 0) return true;
     }
     return false;
   }
-
-  function isRegion(loc) {
+  function hasRegion(loc) {
     loc = normalize(loc);
     for (var i = 0; i < REGIONS.length; i++) {
-      if (loc.indexOf(REGIONS[i]) > -1) {
-        console.log('[VMF] Region match:', loc, '→', REGIONS[i]);
-        return true;
-      }
+      if (loc.indexOf(REGIONS[i]) > -1) return true;
     }
     return false;
   }
 
-  // ============ PROXIMITY CALCULATION ============
-  
-  function desiredMiles() {
-    var qs = getQS();
-    var loc = qs.get('location') || '';
-    var region = qs.get('region') || '';
-
-    console.log('[VMF] desiredMiles: loc="' + loc + '", region="' + region + '"');
-
-    // Region param = 20mi cap
-    if (region && normalize(region)) {
-      console.log('[VMF] → Region param, returning', POLICY.METRO_CAP);
-      return POLICY.METRO_CAP;
-    }
-
-    if (!loc) return null;
-
-    // Check in order
+  function getProximityForLocation(loc) {
+    console.log('[VMF] getProximityForLocation:', loc);
+    if (!loc) return POLICY.TOWN;
+    
     if (isFullPostcode(loc)) {
       console.log('[VMF] → Full postcode:', POLICY.FULL_POSTCODE);
       return POLICY.FULL_POSTCODE;
@@ -191,92 +79,190 @@
       console.log('[VMF] → Outcode:', POLICY.OUTCODE);
       return POLICY.OUTCODE;
     }
-    if (isRegion(loc)) {
-      console.log('[VMF] → Region name:', POLICY.METRO_CAP);
+    if (hasRegion(loc)) {
+      console.log('[VMF] → Region:', POLICY.METRO_CAP);
       return POLICY.METRO_CAP;
     }
-    if (matchesList(loc, GREATER_METROS)) {
+    if (inList(loc, GREATER_METROS)) {
       console.log('[VMF] → Greater metro:', POLICY.METRO_CAP);
       return POLICY.METRO_CAP;
     }
-    if (matchesList(loc, MAJOR_CITIES)) {
+    if (inList(loc, MAJOR_CITIES)) {
       console.log('[VMF] → Major city:', POLICY.MAJOR_CITY);
       return POLICY.MAJOR_CITY;
     }
-    if (matchesList(loc, LARGE_CITIES)) {
+    if (inList(loc, LARGE_CITIES)) {
       console.log('[VMF] → Large city:', POLICY.LARGE_CITY);
       return POLICY.LARGE_CITY;
     }
-    if (matchesList(loc, SMALL_CITIES)) {
+    if (inList(loc, SMALL_CITIES)) {
       console.log('[VMF] → Small city:', POLICY.SMALL_CITY);
       return POLICY.SMALL_CITY;
     }
-    
-    // Default: town
     console.log('[VMF] → Town (default):', POLICY.TOWN);
     return POLICY.TOWN;
   }
 
-  function currentMiles() {
-    var prox = parseFloat(getQS().get('proximity'));
-    return isFinite(prox) ? prox : null;
-  }
-
-  function shouldRedirect() {
-    if (!isExplore()) return false;
-    var want = desiredMiles();
-    if (want == null) return false;
-    var cur = currentMiles();
-    if (cur == null) return true;
-    return Math.round(cur) !== Math.round(want);
-  }
-
-  function onceKey(url) {
+  // ============ SET PROXIMITY SLIDER ============
+  function setProximitySlider(miles) {
+    console.log('[VMF] Setting proximity slider to:', miles);
+    
+    // Method 1: jQuery UI Slider
     try {
-      var u = new URL(url);
-      return 'VMF_ONCE::' + u.pathname + u.search;
-    } catch (_) {
-      return 'VMF_ONCE::' + url;
+      var $slider = jQuery('.proximity-slider .slider-range, .proximity-filter .slider-range');
+      if ($slider.length && $slider.slider) {
+        $slider.slider('value', miles);
+        console.log('[VMF] Set via jQuery UI slider');
+      }
+    } catch (e) { console.log('[VMF] jQuery slider failed:', e); }
+    
+    // Method 2: Hidden input
+    try {
+      var inputs = document.querySelectorAll('input[name="proximity"], input[data-filter="proximity"]');
+      inputs.forEach(function(inp) {
+        inp.value = miles;
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    } catch (e) {}
+    
+    // Method 3: Vue.js data binding (MyListing uses Vue)
+    try {
+      var filters = document.querySelector('.explore-filters, [data-explore-filters]');
+      if (filters && filters.__vue__) {
+        var vm = filters.__vue__;
+        if (vm.filters && vm.filters.proximity !== undefined) {
+          vm.filters.proximity = miles;
+          console.log('[VMF] Set via Vue:', miles);
+        }
+      }
+    } catch (e) {}
+    
+    // Method 4: URL parameter for page loads with location
+    try {
+      var url = new URL(window.location.href);
+      if (url.searchParams.get('location') || url.searchParams.get('lat')) {
+        url.searchParams.set('proximity', miles);
+        if (url.href !== window.location.href) {
+          console.log('[VMF] Updating URL proximity');
+        }
+      }
+    } catch (e) {}
+  }
+
+  // ============ INTERCEPT AUTOCOMPLETE ============
+  function interceptAutocomplete() {
+    // Watch for location input changes
+    var locationInputs = document.querySelectorAll(
+      'input[name="search_location"], ' +
+      'input[name="location"], ' +
+      'input.location-field, ' +
+      '.explore-location input, ' +
+      '.pac-target-input'
+    );
+    
+    locationInputs.forEach(function(input) {
+      if (input._vmfHooked) return;
+      input._vmfHooked = true;
+      
+      console.log('[VMF] Hooking location input:', input);
+      
+      // Listen for blur (user finished typing/selecting)
+      input.addEventListener('blur', function() {
+        var loc = input.value;
+        if (loc && loc.length > 2) {
+          var prox = getProximityForLocation(loc);
+          setProximitySlider(prox);
+        }
+      });
+      
+      // Listen for Enter key
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          setTimeout(function() {
+            var loc = input.value;
+            if (loc) {
+              var prox = getProximityForLocation(loc);
+              setProximitySlider(prox);
+            }
+          }, 100);
+        }
+      });
+    });
+    
+    // Hook Google Places Autocomplete
+    if (window.google && google.maps && google.maps.places) {
+      var origAutocomplete = google.maps.places.Autocomplete;
+      if (!origAutocomplete._vmfPatched) {
+        google.maps.places.Autocomplete = function(input, opts) {
+          var ac = new origAutocomplete(input, opts);
+          
+          ac.addListener('place_changed', function() {
+            var place = ac.getPlace();
+            var loc = place.formatted_address || place.name || input.value;
+            console.log('[VMF] Place selected:', loc);
+            var prox = getProximityForLocation(loc);
+            setProximitySlider(prox);
+          });
+          
+          return ac;
+        };
+        google.maps.places.Autocomplete._vmfPatched = true;
+        console.log('[VMF] Patched Google Autocomplete');
+      }
+    }
+    
+    // Watch for pac-item clicks (Google autocomplete dropdown)
+    document.addEventListener('click', function(e) {
+      if (e.target.closest('.pac-item')) {
+        setTimeout(function() {
+          var input = document.querySelector('.pac-target-input, input[name="search_location"]');
+          if (input && input.value) {
+            var prox = getProximityForLocation(input.value);
+            setProximitySlider(prox);
+          }
+        }, 200);
+      }
+    }, true);
+  }
+
+  // ============ HANDLE URL PARAMS ============
+  function handleUrlParams() {
+    var qs = new URLSearchParams(window.location.search);
+    var loc = qs.get('location');
+    var region = qs.get('region');
+    var currentProx = qs.get('proximity');
+    
+    if (region) {
+      setProximitySlider(POLICY.METRO_CAP);
+      return;
+    }
+    
+    if (loc && !currentProx) {
+      var prox = getProximityForLocation(loc);
+      setProximitySlider(prox);
     }
   }
 
   // ============ BOOT ============
-  
   function boot() {
     console.log('[VMF] Boot:', VERSION);
     
-    if (shouldRedirect()) {
-      var qs = getQS();
-      var want = desiredMiles();
-      qs.set('proximity', String(want));
-      var url = setQS(qs);
-      var k = onceKey(url);
-      
-      try {
-        if (sessionStorage.getItem(k) !== '1') {
-          sessionStorage.setItem(k, '1');
-          console.log('[VMF] Redirecting to:', url);
-          window.location.replace(url);
-          return;
-        }
-      } catch (_) {}
-    }
-
-    // QA Panel
-    if (getQS().get('vmftest') === '1') {
-      var panel = document.createElement('div');
-      panel.style.cssText = 'position:fixed;right:10px;bottom:10px;z-index:999999;background:#fff;padding:12px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);font:11px/1.4 system-ui;max-width:320px;';
-      var loc = getQS().get('location') || '';
-      var want = desiredMiles();
-      var cur = currentMiles();
-      panel.innerHTML = '<b>VMF ' + VERSION + '</b><br>' +
-        'Location: ' + (loc || '(none)') + '<br>' +
-        'Expected: ' + (want || 'n/a') + 'mi<br>' +
-        'Current: ' + (cur || 'n/a') + 'mi<br>' +
-        'Match: ' + (want === cur ? '✓' : '✗');
-      document.body.appendChild(panel);
-    }
-
+    // Set proximity from URL if present
+    handleUrlParams();
+    
+    // Hook autocomplete
+    interceptAutocomplete();
+    
+    // Re-hook after DOM changes (Vue re-renders)
+    var observer = new MutationObserver(function() {
+      interceptAutocomplete();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Also re-hook after short delay (for late-loading scripts)
+    setTimeout(interceptAutocomplete, 1000);
+    setTimeout(interceptAutocomplete, 3000);
+    
     console.log('[VMF] Boot complete');
   }
 
