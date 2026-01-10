@@ -1,6 +1,6 @@
-/* VMF assets v0.2.1 */
+/* VMF assets v0.2.2 */
 (() => {
-  const v = "v0.2.1";
+  const v = "v0.2.2";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
 
@@ -27,17 +27,15 @@
   } catch (_) {}
 })();
 
-/*! VMF-AUTOHOOK v2026-01-08a — STAGING2 ONLY
-    - Deterministic proximity policy via URL (no slider DOM required)
-    - 1x on-load correction redirect if proximity mismatched
-    - ?vmfdebug=1 shows badge
-    - ?vmftest=1 shows QA panel + PASS/FAIL + Copy report
-    - Hides empty "Categories" tab (if present and empty)
+/*! VMF-AUTOHOOK v0.2.2
+    - Fixed isExplore() detection for MyListing theme
+    - Proximity policy: postcode 5mi, outcode 10mi, town 10mi, metro 12mi, region 20mi
+    - Mobile: default map view
 */
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v2026-01-08a';
+  var VERSION = 'VMF-AUTOHOOK v0.2.2';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
 
@@ -68,8 +66,45 @@
     try { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); } catch (_) { return []; }
   }
 
+  // FIXED: More robust explore page detection for MyListing theme
   function isExplore() {
-    return !!($('body.page-template-explore') || $('.explore-page') || $('[data-page="explore"]'));
+    // Check URL path
+    var path = window.location.pathname.toLowerCase();
+    if (path.indexOf('/van-mot-garage') > -1 || 
+        path.indexOf('/explore') > -1 || 
+        path.indexOf('/listings') > -1 ||
+        path.indexOf('/directory') > -1) {
+      return true;
+    }
+    
+    // Check body classes (various themes)
+    var body = document.body;
+    if (body) {
+      var cls = body.className || '';
+      if (cls.indexOf('explore') > -1 || 
+          cls.indexOf('archive') > -1 ||
+          cls.indexOf('listing') > -1 ||
+          cls.indexOf('directory') > -1) {
+        return true;
+      }
+    }
+    
+    // Check for explore-specific elements
+    if ($('.c27-explore-listings') || 
+        $('.explore-listings') || 
+        $('#c27-explore-map') ||
+        $('.finder-listings') ||
+        $('[data-page="explore"]')) {
+      return true;
+    }
+    
+    // Check URL params that indicate explore/search
+    var qs = getQS();
+    if (qs.get('type') || qs.get('lat') || qs.get('lng') || qs.get('location')) {
+      return true;
+    }
+    
+    return false;
   }
 
   function getQS() {
@@ -95,11 +130,13 @@
 
   function isOutcode(s) {
     s = normalize(s).toUpperCase();
+    // UK outcode: 1-2 letters, 1-2 digits, optional letter (e.g., SW1A, E1, W1)
     return /^[A-Z]{1,2}\d[A-Z\d]?$/.test(s);
   }
 
   function isFullPostcode(s) {
     s = normalize(s).toUpperCase();
+    // UK full postcode with space or without (e.g., SW1A 1AA or SW1A1AA)
     return /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/.test(s);
   }
 
@@ -112,7 +149,47 @@
 
   function isMetro(loc) {
     loc = normalize(loc).toLowerCase();
-    return /(london|greater london|manchester|birmingham|leeds|liverpool|glasgow|edinburgh|bristol|sheffield|cardiff|newcastle|nottingham)/.test(loc);
+    // Major UK metro areas
+    var metros = [
+      'london', 'greater london', 'central london',
+      'manchester', 'greater manchester',
+      'birmingham', 'west midlands',
+      'leeds', 'west yorkshire',
+      'liverpool', 'merseyside',
+      'glasgow', 'greater glasgow',
+      'edinburgh',
+      'bristol',
+      'sheffield', 'south yorkshire',
+      'cardiff',
+      'newcastle', 'tyne and wear',
+      'nottingham',
+      'leicester',
+      'coventry',
+      'bradford'
+    ];
+    
+    for (var i = 0; i < metros.length; i++) {
+      if (loc.indexOf(metros[i]) > -1) return true;
+    }
+    return false;
+  }
+
+  function isRegion(loc) {
+    loc = normalize(loc).toLowerCase();
+    // UK counties/regions
+    var regions = [
+      'shire', 'county', 'region',
+      'yorkshire', 'lancashire', 'cheshire', 'derbyshire',
+      'kent', 'essex', 'sussex', 'surrey', 'hampshire',
+      'devon', 'cornwall', 'somerset', 'dorset', 'wiltshire',
+      'norfolk', 'suffolk', 'cambridgeshire', 'lincolnshire',
+      'wales', 'scotland', 'northern ireland'
+    ];
+    
+    for (var i = 0; i < regions.length; i++) {
+      if (loc.indexOf(regions[i]) > -1) return true;
+    }
+    return false;
   }
 
   function desiredMiles() {
@@ -120,18 +197,20 @@
     var loc = qs.get(URL_KEYS.LOCATION);
     var region = qs.get(URL_KEYS.REGION);
 
-    if ((!loc || !normalize(loc)) && region && normalize(region)) return POLICY.REGION_CLAMP_MI;
+    // If region param is set (county-level search)
+    if (region && normalize(region)) {
+      return POLICY.REGION_CLAMP_MI;
+    }
 
     loc = normalize(loc);
     if (!loc) return null;
 
+    // Check location type in order of specificity
     if (isFullPostcode(loc)) return POLICY.FULL_POSTCODE_MI;
     if (isOutcode(loc)) return POLICY.OUTCODE_MI;
-
-    if (hasTownishLocation(loc)) {
-      if (isMetro(loc)) return POLICY.METRO_MI;
-      return POLICY.TOWN_MI;
-    }
+    if (isRegion(loc)) return POLICY.REGION_CLAMP_MI;
+    if (isMetro(loc)) return POLICY.METRO_MI;
+    if (hasTownishLocation(loc)) return POLICY.TOWN_MI;
 
     return null;
   }
@@ -142,10 +221,19 @@
   }
 
   function shouldRedirectFix() {
-    if (!isExplore()) return false;
+    if (!isExplore()) {
+      console.log('[VMF] Not explore page, skipping proximity fix');
+      return false;
+    }
+    
     var want = desiredMiles();
+    console.log('[VMF] Desired proximity:', want);
+    
     if (want == null) return false;
+    
     var cur = currentMiles();
+    console.log('[VMF] Current proximity:', cur);
+    
     if (cur == null) return true;
     return Math.round(cur) !== Math.round(want);
   }
@@ -170,6 +258,32 @@
 
   function wasOnce(k) {
     try { return sessionStorage.getItem(k) === '1'; } catch (_) { return false; }
+  }
+
+  // ---------- Mobile: Force map view ----------
+  function isMobile() {
+    return window.innerWidth < 768;
+  }
+
+  function forceMapViewOnMobile() {
+    if (!isMobile()) return;
+    if (!isExplore()) return;
+    
+    // Try to click map toggle if list is showing
+    var mapToggle = $('button[data-view="map"], a[data-view="map"], .map-toggle, [aria-label*="map" i]');
+    if (mapToggle) {
+      try {
+        mapToggle.click();
+        console.log('[VMF] Clicked map toggle for mobile');
+      } catch (_) {}
+    }
+    
+    // Also try to show map container directly
+    var mapContainer = $('.explore-map, #c27-explore-map, .map-container, .c27-map');
+    if (mapContainer) {
+      mapContainer.style.display = 'block';
+      mapContainer.style.visibility = 'visible';
+    }
   }
 
   // ---------- QA Panel ----------
@@ -198,17 +312,21 @@
       var lines = [];
       lines.push('VERSION=' + VERSION);
       lines.push('URL=' + window.location.href);
-      lines.push('EXPLORE=' + (isExplore() ? 'yes' : 'no'));
+      lines.push('IS_EXPLORE=' + (isExplore() ? 'yes' : 'no'));
+      lines.push('IS_MOBILE=' + (isMobile() ? 'yes' : 'no'));
 
+      var qs = getQS();
+      lines.push('LOCATION=' + (qs.get('location') || 'none'));
+      lines.push('REGION=' + (qs.get('region') || 'none'));
+      
       var want = desiredMiles();
       var cur = currentMiles();
       lines.push('PROX_WANT=' + (want == null ? 'n/a' : want));
       lines.push('PROX_CUR=' + (cur == null ? 'n/a' : cur));
+      lines.push('PROX_MATCH=' + (want === cur ? 'YES' : 'NO'));
 
-      var links = $all('a[href*="/listing/"], a[href*="/listings/"]');
+      var links = $all('a[href*="/listing/"]');
       lines.push('LISTING_LINKS=' + (links.length || 0));
-
-      lines.push('CATEGORIES_TAB=' + ($all('a[href*="#categories"], a[href*="#category"]').length ? 'present' : 'none'));
 
       return lines;
     }
@@ -272,20 +390,30 @@
 
   // ---------- Boot ----------
   function boot() {
+    console.log('[VMF] Boot:', VERSION);
+    console.log('[VMF] isExplore:', isExplore());
+    
+    // 1) One-time proximity correction redirect
     if (shouldRedirectFix()) {
       var fix = applyProximityFix();
       if (fix.did) {
         var k = onceKeyFor(fix.url);
         if (!wasOnce(k)) {
           markOnce(k);
+          console.log('[VMF] Redirecting to fix proximity:', fix.url);
           window.location.replace(fix.url);
           return;
         }
       }
     }
 
+    // 2) Mobile: force map view
+    forceMapViewOnMobile();
+
+    // 3) UI tweaks
     hideEmptyCategoriesTab();
 
+    // 4) Debug / QA UIs
     if (shouldShowDebugBadge()) showDebugBadge();
     if (shouldShowTestPanel()) ensurePanel();
   }
