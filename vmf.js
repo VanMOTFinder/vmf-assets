@@ -1,12 +1,10 @@
-/* VMF assets v0.2.6 - Intercept Autocomplete */
+/* VMF assets v0.2.7 - Aggressive Polling */
 (() => {
-  const v = "v0.2.6";
+  const v = "v0.2.7";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
-    const qs = new URLSearchParams(location.search || "");
-    const hash = (location.hash || "");
-    if (qs.get("vmf_debug") === "1" || hash.includes("vmf_debug=1")) {
+    if (new URLSearchParams(location.search).get("vmf_debug") === "1" || location.hash.includes("vmf_debug=1")) {
       localStorage.setItem("vmf_debug", "1");
     }
     if (localStorage.getItem("vmf_debug") === "1") {
@@ -18,28 +16,20 @@
   } catch (_) {}
 })();
 
-/*! VMF-AUTOHOOK v0.2.6
-    Intercepts autocomplete selection and sets proximity slider
-    BEFORE MyListing's AJAX search fires
+/*! VMF-AUTOHOOK v0.2.7
+    Aggressive polling approach - watches location input value
+    and sets proximity slider when it changes
 */
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.2.6';
+  var VERSION = 'VMF-AUTOHOOK v0.2.7';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK initializing:', VERSION);
 
   // ============ PROXIMITY POLICY ============
-  var POLICY = {
-    FULL_POSTCODE: 3,
-    OUTCODE: 5,
-    TOWN: 8,
-    SMALL_CITY: 10,
-    LARGE_CITY: 12,
-    MAJOR_CITY: 15,
-    METRO_CAP: 20
-  };
+  var POLICY = { FULL_POSTCODE: 3, OUTCODE: 5, TOWN: 8, SMALL_CITY: 10, LARGE_CITY: 12, MAJOR_CITY: 15, METRO_CAP: 20 };
 
   // ============ UK LOCATION DATA ============
   var GREATER_METROS = ['greater london', 'london', 'central london', 'greater manchester', 'west midlands', 'west yorkshire', 'merseyside', 'south yorkshire', 'tyneside', 'tyne and wear'];
@@ -48,222 +38,184 @@
   var SMALL_CITIES = ['reading', 'luton', 'milton keynes', 'northampton', 'peterborough', 'cambridge', 'oxford', 'ipswich', 'norwich', 'hull', 'kingston upon hull', 'middlesbrough', 'bolton', 'sunderland', 'warrington', 'stockport', 'york', 'blackpool', 'preston', 'blackburn', 'burnley', 'wakefield', 'barnsley', 'doncaster', 'rotherham', 'wigan', 'oldham', 'rochdale', 'salford', 'dudley', 'walsall'];
   var REGIONS = ['yorkshire', 'lancashire', 'cheshire', 'derbyshire', 'nottinghamshire', 'leicestershire', 'northamptonshire', 'warwickshire', 'staffordshire', 'kent', 'essex', 'sussex', 'surrey', 'hampshire', 'berkshire', 'devon', 'cornwall', 'somerset', 'dorset', 'wiltshire', 'norfolk', 'suffolk', 'cambridgeshire', 'northumberland', 'durham', 'cumbria', 'wales', 'scotland', 'northern ireland', 'shire', 'county', 'region'];
 
-  // ============ DETECTION ============
   function normalize(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
   function isFullPostcode(s) { return /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(s); }
   function isOutcode(s) { return /^[A-Z]{1,2}\d[A-Z\d]?$/i.test(normalize(s).toUpperCase()); }
-  function inList(loc, list) {
-    loc = normalize(loc);
-    for (var i = 0; i < list.length; i++) {
-      if (loc === list[i] || loc.indexOf(list[i]) === 0) return true;
-    }
-    return false;
-  }
-  function hasRegion(loc) {
-    loc = normalize(loc);
-    for (var i = 0; i < REGIONS.length; i++) {
-      if (loc.indexOf(REGIONS[i]) > -1) return true;
-    }
-    return false;
-  }
+  function inList(loc, list) { loc = normalize(loc); for (var i = 0; i < list.length; i++) { if (loc === list[i] || loc.indexOf(list[i]) === 0) return true; } return false; }
+  function hasRegion(loc) { loc = normalize(loc); for (var i = 0; i < REGIONS.length; i++) { if (loc.indexOf(REGIONS[i]) > -1) return true; } return false; }
 
-  function getProximityForLocation(loc) {
-    console.log('[VMF] getProximityForLocation:', loc);
-    if (!loc) return POLICY.TOWN;
-    
-    if (isFullPostcode(loc)) {
-      console.log('[VMF] → Full postcode:', POLICY.FULL_POSTCODE);
-      return POLICY.FULL_POSTCODE;
-    }
-    if (isOutcode(loc)) {
-      console.log('[VMF] → Outcode:', POLICY.OUTCODE);
-      return POLICY.OUTCODE;
-    }
-    if (hasRegion(loc)) {
-      console.log('[VMF] → Region:', POLICY.METRO_CAP);
-      return POLICY.METRO_CAP;
-    }
-    if (inList(loc, GREATER_METROS)) {
-      console.log('[VMF] → Greater metro:', POLICY.METRO_CAP);
-      return POLICY.METRO_CAP;
-    }
-    if (inList(loc, MAJOR_CITIES)) {
-      console.log('[VMF] → Major city:', POLICY.MAJOR_CITY);
-      return POLICY.MAJOR_CITY;
-    }
-    if (inList(loc, LARGE_CITIES)) {
-      console.log('[VMF] → Large city:', POLICY.LARGE_CITY);
-      return POLICY.LARGE_CITY;
-    }
-    if (inList(loc, SMALL_CITIES)) {
-      console.log('[VMF] → Small city:', POLICY.SMALL_CITY);
-      return POLICY.SMALL_CITY;
-    }
-    console.log('[VMF] → Town (default):', POLICY.TOWN);
+  function getProximity(loc) {
+    if (!loc || loc.length < 2) return null;
+    console.log('[VMF] getProximity:', loc);
+    if (isFullPostcode(loc)) { console.log('[VMF] → Postcode:', POLICY.FULL_POSTCODE); return POLICY.FULL_POSTCODE; }
+    if (isOutcode(loc)) { console.log('[VMF] → Outcode:', POLICY.OUTCODE); return POLICY.OUTCODE; }
+    if (hasRegion(loc)) { console.log('[VMF] → Region:', POLICY.METRO_CAP); return POLICY.METRO_CAP; }
+    if (inList(loc, GREATER_METROS)) { console.log('[VMF] → Metro:', POLICY.METRO_CAP); return POLICY.METRO_CAP; }
+    if (inList(loc, MAJOR_CITIES)) { console.log('[VMF] → Major:', POLICY.MAJOR_CITY); return POLICY.MAJOR_CITY; }
+    if (inList(loc, LARGE_CITIES)) { console.log('[VMF] → Large:', POLICY.LARGE_CITY); return POLICY.LARGE_CITY; }
+    if (inList(loc, SMALL_CITIES)) { console.log('[VMF] → Small:', POLICY.SMALL_CITY); return POLICY.SMALL_CITY; }
+    console.log('[VMF] → Town:', POLICY.TOWN);
     return POLICY.TOWN;
   }
 
-  // ============ SET PROXIMITY SLIDER ============
-  function setProximitySlider(miles) {
-    console.log('[VMF] Setting proximity slider to:', miles);
+  // ============ SET PROXIMITY ============
+  var lastSetProximity = null;
+  
+  function setProximity(miles) {
+    if (miles === lastSetProximity) return;
+    lastSetProximity = miles;
+    console.log('[VMF] *** SETTING PROXIMITY TO:', miles, '***');
     
     // Method 1: jQuery UI Slider
-    try {
-      var $slider = jQuery('.proximity-slider .slider-range, .proximity-filter .slider-range');
-      if ($slider.length && $slider.slider) {
-        $slider.slider('value', miles);
-        console.log('[VMF] Set via jQuery UI slider');
-      }
-    } catch (e) { console.log('[VMF] jQuery slider failed:', e); }
+    if (window.jQuery) {
+      try {
+        var $slider = jQuery('.proximity-slider .slider-range, .proximity-filter .slider-range, .radius .slider-range');
+        if ($slider.length) {
+          $slider.slider('value', miles);
+          // Trigger change event
+          $slider.trigger('slidechange', { value: miles });
+          console.log('[VMF] Set jQuery slider to', miles);
+        }
+      } catch (e) { console.log('[VMF] jQuery slider error:', e.message); }
+      
+      // Also try setting the display text
+      try {
+        jQuery('.proximity-slider .amount, .proximity-filter .amount, .radius .amount').text(miles + 'mi');
+      } catch (e) {}
+    }
     
-    // Method 2: Hidden input
+    // Method 2: Find and set hidden inputs
     try {
-      var inputs = document.querySelectorAll('input[name="proximity"], input[data-filter="proximity"]');
-      inputs.forEach(function(inp) {
+      document.querySelectorAll('input[name="proximity"], input[name="radius"], input[data-key="proximity"]').forEach(function(inp) {
         inp.value = miles;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
         inp.dispatchEvent(new Event('change', { bubbles: true }));
+        console.log('[VMF] Set input to', miles);
       });
     } catch (e) {}
     
-    // Method 3: Vue.js data binding (MyListing uses Vue)
+    // Method 3: Vue.js 
     try {
-      var filters = document.querySelector('.explore-filters, [data-explore-filters]');
-      if (filters && filters.__vue__) {
-        var vm = filters.__vue__;
+      var exploreEl = document.querySelector('[data-explore], .explore-filters, #explore-filters');
+      if (exploreEl && exploreEl.__vue__) {
+        var vm = exploreEl.__vue__;
+        if (vm.$data && vm.$data.proximity !== undefined) {
+          vm.$data.proximity = miles;
+          console.log('[VMF] Set Vue proximity');
+        }
         if (vm.filters && vm.filters.proximity !== undefined) {
           vm.filters.proximity = miles;
-          console.log('[VMF] Set via Vue:', miles);
-        }
-      }
-    } catch (e) {}
-    
-    // Method 4: URL parameter for page loads with location
-    try {
-      var url = new URL(window.location.href);
-      if (url.searchParams.get('location') || url.searchParams.get('lat')) {
-        url.searchParams.set('proximity', miles);
-        if (url.href !== window.location.href) {
-          console.log('[VMF] Updating URL proximity');
+          console.log('[VMF] Set Vue filters.proximity');
         }
       }
     } catch (e) {}
   }
 
-  // ============ INTERCEPT AUTOCOMPLETE ============
-  function interceptAutocomplete() {
-    // Watch for location input changes
-    var locationInputs = document.querySelectorAll(
-      'input[name="search_location"], ' +
-      'input[name="location"], ' +
-      'input.location-field, ' +
-      '.explore-location input, ' +
-      '.pac-target-input'
-    );
-    
-    locationInputs.forEach(function(input) {
-      if (input._vmfHooked) return;
-      input._vmfHooked = true;
-      
-      console.log('[VMF] Hooking location input:', input);
-      
-      // Listen for blur (user finished typing/selecting)
-      input.addEventListener('blur', function() {
-        var loc = input.value;
-        if (loc && loc.length > 2) {
-          var prox = getProximityForLocation(loc);
-          setProximitySlider(prox);
-        }
-      });
-      
-      // Listen for Enter key
-      input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          setTimeout(function() {
-            var loc = input.value;
-            if (loc) {
-              var prox = getProximityForLocation(loc);
-              setProximitySlider(prox);
-            }
-          }, 100);
-        }
-      });
-    });
-    
-    // Hook Google Places Autocomplete
-    if (window.google && google.maps && google.maps.places) {
-      var origAutocomplete = google.maps.places.Autocomplete;
-      if (!origAutocomplete._vmfPatched) {
-        google.maps.places.Autocomplete = function(input, opts) {
-          var ac = new origAutocomplete(input, opts);
-          
-          ac.addListener('place_changed', function() {
-            var place = ac.getPlace();
-            var loc = place.formatted_address || place.name || input.value;
-            console.log('[VMF] Place selected:', loc);
-            var prox = getProximityForLocation(loc);
-            setProximitySlider(prox);
-          });
-          
-          return ac;
-        };
-        google.maps.places.Autocomplete._vmfPatched = true;
-        console.log('[VMF] Patched Google Autocomplete');
+  // ============ WATCH LOCATION INPUT ============
+  var lastLocation = '';
+  var locationInput = null;
+  
+  function findLocationInput() {
+    var selectors = [
+      'input[name="search_location"]',
+      'input[name="location"]', 
+      'input.pac-target-input',
+      '.explore-location input',
+      '.location-field input',
+      'input[placeholder*="location" i]',
+      'input[placeholder*="postcode" i]',
+      'input[placeholder*="address" i]'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var inp = document.querySelector(selectors[i]);
+      if (inp) return inp;
+    }
+    return null;
+  }
+  
+  function checkLocationChange() {
+    if (!locationInput) {
+      locationInput = findLocationInput();
+      if (locationInput) {
+        console.log('[VMF] Found location input:', locationInput.name || locationInput.className);
       }
     }
     
-    // Watch for pac-item clicks (Google autocomplete dropdown)
-    document.addEventListener('click', function(e) {
-      if (e.target.closest('.pac-item')) {
+    if (locationInput) {
+      var currentLoc = locationInput.value;
+      if (currentLoc && currentLoc !== lastLocation && currentLoc.length > 2) {
+        console.log('[VMF] Location changed:', lastLocation, '→', currentLoc);
+        lastLocation = currentLoc;
+        
+        // Wait a tick for autocomplete to fully populate
         setTimeout(function() {
-          var input = document.querySelector('.pac-target-input, input[name="search_location"]');
-          if (input && input.value) {
-            var prox = getProximityForLocation(input.value);
-            setProximitySlider(prox);
+          var loc = locationInput.value;
+          var prox = getProximity(loc);
+          if (prox) {
+            setProximity(prox);
           }
-        }, 200);
+        }, 100);
       }
-    }, true);
+    }
   }
-
-  // ============ HANDLE URL PARAMS ============
-  function handleUrlParams() {
+  
+  // ============ URL PARAM HANDLER ============
+  function handleUrlProximity() {
     var qs = new URLSearchParams(window.location.search);
-    var loc = qs.get('location');
-    var region = qs.get('region');
-    var currentProx = qs.get('proximity');
+    var loc = qs.get('location') || qs.get('search_location') || '';
+    var region = qs.get('region') || '';
+    var currentProx = parseFloat(qs.get('proximity'));
+    
+    console.log('[VMF] URL params - loc:', loc, 'region:', region, 'prox:', currentProx);
     
     if (region) {
-      setProximitySlider(POLICY.METRO_CAP);
+      if (currentProx !== POLICY.METRO_CAP) {
+        console.log('[VMF] Region detected, need', POLICY.METRO_CAP, 'have', currentProx);
+        redirectWithProximity(POLICY.METRO_CAP);
+      }
       return;
     }
     
-    if (loc && !currentProx) {
-      var prox = getProximityForLocation(loc);
-      setProximitySlider(prox);
+    if (loc) {
+      var wantProx = getProximity(loc);
+      if (wantProx && (!currentProx || Math.round(currentProx) !== Math.round(wantProx))) {
+        console.log('[VMF] Location detected, need', wantProx, 'have', currentProx);
+        redirectWithProximity(wantProx);
+      }
     }
+  }
+  
+  function redirectWithProximity(prox) {
+    var url = new URL(window.location.href);
+    var key = 'VMF_REDIR_' + url.pathname + url.search;
+    
+    if (sessionStorage.getItem(key)) {
+      console.log('[VMF] Already redirected, skipping');
+      return;
+    }
+    
+    url.searchParams.set('proximity', prox);
+    sessionStorage.setItem(key, '1');
+    console.log('[VMF] Redirecting to:', url.href);
+    window.location.replace(url.href);
   }
 
   // ============ BOOT ============
   function boot() {
     console.log('[VMF] Boot:', VERSION);
     
-    // Set proximity from URL if present
-    handleUrlParams();
+    // Handle URL params (for direct links with location)
+    handleUrlProximity();
     
-    // Hook autocomplete
-    interceptAutocomplete();
+    // Poll for location input changes every 500ms
+    setInterval(checkLocationChange, 500);
     
-    // Re-hook after DOM changes (Vue re-renders)
-    var observer = new MutationObserver(function() {
-      interceptAutocomplete();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    // Also check on various events
+    document.addEventListener('click', function() { setTimeout(checkLocationChange, 200); }, true);
+    document.addEventListener('keyup', function() { setTimeout(checkLocationChange, 200); }, true);
+    document.addEventListener('focusout', function() { setTimeout(checkLocationChange, 200); }, true);
     
-    // Also re-hook after short delay (for late-loading scripts)
-    setTimeout(interceptAutocomplete, 1000);
-    setTimeout(interceptAutocomplete, 3000);
-    
-    console.log('[VMF] Boot complete');
+    console.log('[VMF] Boot complete - polling active');
   }
 
   if (document.readyState === 'loading') {
