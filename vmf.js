@@ -1,6 +1,6 @@
-/* VMF assets v0.2.7 - Aggressive Polling */
+/* VMF assets v0.2.8 - Forced Redirect */
 (() => {
-  const v = "v0.2.7";
+  const v = "v0.2.8";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -16,14 +16,14 @@
   } catch (_) {}
 })();
 
-/*! VMF-AUTOHOOK v0.2.7
-    Aggressive polling approach - watches location input value
-    and sets proximity slider when it changes
+/*! VMF-AUTOHOOK v0.2.8
+    Strategy: When user selects location, redirect to URL with correct proximity
+    This forces MyListing to use our proximity value
 */
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.2.7';
+  var VERSION = 'VMF-AUTOHOOK v0.2.8';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK initializing:', VERSION);
@@ -45,7 +45,7 @@
   function hasRegion(loc) { loc = normalize(loc); for (var i = 0; i < REGIONS.length; i++) { if (loc.indexOf(REGIONS[i]) > -1) return true; } return false; }
 
   function getProximity(loc) {
-    if (!loc || loc.length < 2) return null;
+    if (!loc || loc.length < 2) return POLICY.TOWN;
     console.log('[VMF] getProximity:', loc);
     if (isFullPostcode(loc)) { console.log('[VMF] → Postcode:', POLICY.FULL_POSTCODE); return POLICY.FULL_POSTCODE; }
     if (isOutcode(loc)) { console.log('[VMF] → Outcode:', POLICY.OUTCODE); return POLICY.OUTCODE; }
@@ -58,169 +58,50 @@
     return POLICY.TOWN;
   }
 
-  // ============ SET PROXIMITY ============
-  var lastSetProximity = null;
-  
-  function setProximity(miles) {
-    if (miles === lastSetProximity) return;
-    lastSetProximity = miles;
-    console.log('[VMF] *** SETTING PROXIMITY TO:', miles, '***');
-    
-    // Method 1: jQuery UI Slider
-    if (window.jQuery) {
-      try {
-        var $slider = jQuery('.proximity-slider .slider-range, .proximity-filter .slider-range, .radius .slider-range');
-        if ($slider.length) {
-          $slider.slider('value', miles);
-          // Trigger change event
-          $slider.trigger('slidechange', { value: miles });
-          console.log('[VMF] Set jQuery slider to', miles);
-        }
-      } catch (e) { console.log('[VMF] jQuery slider error:', e.message); }
-      
-      // Also try setting the display text
-      try {
-        jQuery('.proximity-slider .amount, .proximity-filter .amount, .radius .amount').text(miles + 'mi');
-      } catch (e) {}
-    }
-    
-    // Method 2: Find and set hidden inputs
-    try {
-      document.querySelectorAll('input[name="proximity"], input[name="radius"], input[data-key="proximity"]').forEach(function(inp) {
-        inp.value = miles;
-        inp.dispatchEvent(new Event('input', { bubbles: true }));
-        inp.dispatchEvent(new Event('change', { bubbles: true }));
-        console.log('[VMF] Set input to', miles);
-      });
-    } catch (e) {}
-    
-    // Method 3: Vue.js 
-    try {
-      var exploreEl = document.querySelector('[data-explore], .explore-filters, #explore-filters');
-      if (exploreEl && exploreEl.__vue__) {
-        var vm = exploreEl.__vue__;
-        if (vm.$data && vm.$data.proximity !== undefined) {
-          vm.$data.proximity = miles;
-          console.log('[VMF] Set Vue proximity');
-        }
-        if (vm.filters && vm.filters.proximity !== undefined) {
-          vm.filters.proximity = miles;
-          console.log('[VMF] Set Vue filters.proximity');
-        }
-      }
-    } catch (e) {}
-  }
-
-  // ============ WATCH LOCATION INPUT ============
-  var lastLocation = '';
-  var locationInput = null;
-  
-  function findLocationInput() {
-    var selectors = [
-      'input[name="search_location"]',
-      'input[name="location"]', 
-      'input.pac-target-input',
-      '.explore-location input',
-      '.location-field input',
-      'input[placeholder*="location" i]',
-      'input[placeholder*="postcode" i]',
-      'input[placeholder*="address" i]'
-    ];
-    for (var i = 0; i < selectors.length; i++) {
-      var inp = document.querySelector(selectors[i]);
-      if (inp) return inp;
-    }
-    return null;
-  }
-  
-  function checkLocationChange() {
-    if (!locationInput) {
-      locationInput = findLocationInput();
-      if (locationInput) {
-        console.log('[VMF] Found location input:', locationInput.name || locationInput.className);
-      }
-    }
-    
-    if (locationInput) {
-      var currentLoc = locationInput.value;
-      if (currentLoc && currentLoc !== lastLocation && currentLoc.length > 2) {
-        console.log('[VMF] Location changed:', lastLocation, '→', currentLoc);
-        lastLocation = currentLoc;
-        
-        // Wait a tick for autocomplete to fully populate
-        setTimeout(function() {
-          var loc = locationInput.value;
-          var prox = getProximity(loc);
-          if (prox) {
-            setProximity(prox);
-          }
-        }, 100);
-      }
-    }
-  }
-  
-  // ============ URL PARAM HANDLER ============
-  function handleUrlProximity() {
-    var qs = new URLSearchParams(window.location.search);
-    var loc = qs.get('location') || qs.get('search_location') || '';
-    var region = qs.get('region') || '';
-    var currentProx = parseFloat(qs.get('proximity'));
-    
-    console.log('[VMF] URL params - loc:', loc, 'region:', region, 'prox:', currentProx);
-    
-    if (region) {
-      if (currentProx !== POLICY.METRO_CAP) {
-        console.log('[VMF] Region detected, need', POLICY.METRO_CAP, 'have', currentProx);
-        redirectWithProximity(POLICY.METRO_CAP);
-      }
-      return;
-    }
-    
-    if (loc) {
-      var wantProx = getProximity(loc);
-      if (wantProx && (!currentProx || Math.round(currentProx) !== Math.round(wantProx))) {
-        console.log('[VMF] Location detected, need', wantProx, 'have', currentProx);
-        redirectWithProximity(wantProx);
-      }
-    }
-  }
-  
-  function redirectWithProximity(prox) {
+  // ============ CHECK URL AND REDIRECT IF NEEDED ============
+  function checkAndRedirect() {
     var url = new URL(window.location.href);
-    var key = 'VMF_REDIR_' + url.pathname + url.search;
+    var loc = url.searchParams.get('search_location') || url.searchParams.get('location') || '';
+    var region = url.searchParams.get('region') || '';
+    var currentProx = parseFloat(url.searchParams.get('proximity'));
     
-    if (sessionStorage.getItem(key)) {
-      console.log('[VMF] Already redirected, skipping');
+    // Skip if no location in URL
+    if (!loc && !region) {
+      console.log('[VMF] No location in URL, skipping redirect check');
       return;
     }
     
-    url.searchParams.set('proximity', prox);
-    sessionStorage.setItem(key, '1');
-    console.log('[VMF] Redirecting to:', url.href);
-    window.location.replace(url.href);
+    // Calculate desired proximity
+    var wantProx = region ? POLICY.METRO_CAP : getProximity(loc);
+    
+    console.log('[VMF] URL check - loc:', loc, 'want:', wantProx, 'have:', currentProx);
+    
+    // If proximity is missing or wrong, redirect
+    if (!currentProx || Math.round(currentProx) !== Math.round(wantProx)) {
+      // Prevent infinite redirect loops
+      var redirKey = 'VMF_R_' + loc.substring(0, 20);
+      if (sessionStorage.getItem(redirKey)) {
+        console.log('[VMF] Already redirected for this location, skipping');
+        return;
+      }
+      sessionStorage.setItem(redirKey, '1');
+      
+      url.searchParams.set('proximity', wantProx);
+      console.log('[VMF] *** REDIRECTING TO:', url.href);
+      window.location.replace(url.href);
+    }
   }
 
   // ============ BOOT ============
   function boot() {
     console.log('[VMF] Boot:', VERSION);
     
-    // Handle URL params (for direct links with location)
-    handleUrlProximity();
+    // Check URL immediately - if there's a location but wrong proximity, redirect
+    checkAndRedirect();
     
-    // Poll for location input changes every 500ms
-    setInterval(checkLocationChange, 500);
-    
-    // Also check on various events
-    document.addEventListener('click', function() { setTimeout(checkLocationChange, 200); }, true);
-    document.addEventListener('keyup', function() { setTimeout(checkLocationChange, 200); }, true);
-    document.addEventListener('focusout', function() { setTimeout(checkLocationChange, 200); }, true);
-    
-    console.log('[VMF] Boot complete - polling active');
+    console.log('[VMF] Boot complete');
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
+  // Run immediately - don't wait for DOMContentLoaded
+  boot();
 })();
