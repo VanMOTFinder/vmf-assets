@@ -1,6 +1,6 @@
-/* VMF assets v0.3.0 */
+/* VMF assets v0.3.1 */
 (() => {
-  const v = "v0.3.0";
+  const v = "v0.3.1";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.0';
+  var VERSION = 'VMF-AUTOHOOK v0.3.1';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -124,14 +124,31 @@
   var hooked = false;
 
   function getVueFilters() {
-    var selectors = ['.explore-filters', '[data-explore-filters]', '.explore-head'];
+    // MyListing theme: filters are on child Vue components, not parent
+    var selectors = [
+      '.explore-head-search',      // Main search component
+      '.location-wrapper',         // Location filter component  
+      '.proximity-slider',         // Proximity slider component
+      '[class*="proximity"]',     // Any proximity-related element
+      '.explore-filters',          // Legacy fallback
+      '#c27-explore-listings'      // Main explore container
+    ];
     for (var i = 0; i < selectors.length; i++) {
       var el = document.querySelector(selectors[i]);
-      if (el && el.__vue__ && el.__vue__.filters) {
+      if (el && el.__vue__ && el.__vue__.filters && el.__vue__.filters.proximity !== undefined) {
+        console.log('[VMF] Found Vue filters on:', selectors[i]);
         return el.__vue__.filters;
       }
-      if (el && el.__vue__ && el.__vue__.$parent && el.__vue__.$parent.filters) {
-        return el.__vue__.$parent.filters;
+    }
+    // Try children of main explore container
+    var main = document.querySelector('#c27-explore-listings');
+    if (main && main.__vue__ && main.__vue__.$children) {
+      for (var j = 0; j < main.__vue__.$children.length; j++) {
+        var child = main.__vue__.$children[j];
+        if (child.filters && child.filters.proximity !== undefined) {
+          console.log('[VMF] Found Vue filters on child', j);
+          return child.filters;
+        }
       }
     }
     return null;
