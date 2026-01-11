@@ -1,6 +1,6 @@
-/* VMF assets v0.3.3 */
+/* VMF assets v0.3.4 */
 (() => {
-  const v = "v0.3.3";
+  const v = "v0.3.4";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.3';
+  var VERSION = 'VMF-AUTOHOOK v0.3.4';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -280,67 +280,41 @@
     if (!isMobile()) return;
     console.log('[VMF] Mobile: triggering search...');
 
-    // Method 1: Click the search button
-    var searchBtn = document.querySelector([
-      '.explore-head-search button[type="submit"]',
-      '.explore-head-search .btn',
-      'button:contains("Search")',
-      '.explore-mobile-nav button',
-      '.search-submit'
-    ].join(','));
-
-    if (!searchBtn) {
-      // Try text-based search for button
-      var buttons = document.querySelectorAll('button, .btn, [type="submit"]');
-      for (var i = 0; i < buttons.length; i++) {
-        var text = (buttons[i].textContent || '').toLowerCase().trim();
-        if (text === 'search' || text.indexOf('search') === 0) {
-          searchBtn = buttons[i];
-          break;
-        }
-      }
-    }
-
-    if (searchBtn) {
-      console.log('[VMF] Mobile: clicking search button');
-      searchBtn.click();
-      // After search triggers, switch to map view
-      setTimeout(switchToMapView, 1500);
-      setTimeout(switchToMapView, 3000);
+    var vue = getExploreVue();
+    if (!vue) {
+      console.log('[VMF] Mobile: Vue instance not found');
       return;
     }
 
-    // Method 2: Call Vue's getListings method directly
-    var vue = getExploreVue();
-    if (vue) {
-      // Try common method names
-      var searchMethods = ['getListings', 'fetchListings', 'doSearch', 'search', 'submitSearch'];
-      for (var j = 0; j < searchMethods.length; j++) {
-        if (typeof vue[searchMethods[j]] === 'function') {
-          console.log('[VMF] Mobile: calling Vue.' + searchMethods[j] + '()');
-          try {
-            vue[searchMethods[j]]();
-            setTimeout(switchToMapView, 1500);
-            setTimeout(switchToMapView, 3000);
-            return;
-          } catch (err) {
-            console.log('[VMF] Error calling', searchMethods[j], err);
-          }
-        }
-      }
+    // IMPORTANT: Switch to map view FIRST to avoid flash of list view
+    switchToMapView();
 
-      // Method 3: Trigger form submit event
-      var form = document.querySelector('.explore-head-search form, form.search-form');
-      if (form) {
-        console.log('[VMF] Mobile: submitting search form');
-        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-        setTimeout(switchToMapView, 1500);
-        setTimeout(switchToMapView, 3000);
+    // Call Vue's getListings method directly (most reliable on mobile)
+    if (typeof vue.getListings === 'function') {
+      console.log('[VMF] Mobile: calling Vue.getListings()');
+      try {
+        vue.getListings();
         return;
+      } catch (err) {
+        console.log('[VMF] Error calling getListings:', err);
       }
     }
 
-    console.log('[VMF] Mobile: could not find search trigger');
+    // Fallback: try other method names
+    var searchMethods = ['fetchListings', 'doSearch', 'search', 'submitSearch'];
+    for (var j = 0; j < searchMethods.length; j++) {
+      if (typeof vue[searchMethods[j]] === 'function') {
+        console.log('[VMF] Mobile: calling Vue.' + searchMethods[j] + '()');
+        try {
+          vue[searchMethods[j]]();
+          return;
+        } catch (err) {
+          console.log('[VMF] Error calling', searchMethods[j], err);
+        }
+      }
+    }
+
+    console.log('[VMF] Mobile: could not find search method on Vue');
   }
 
   function switchToMapView() {
@@ -412,13 +386,14 @@
       var v = getExploreVue();
       if (!v) return;
 
-      // Detect when loading finishes (loading goes from true to false)
-      if (lastLoading === true && v.loading === false) {
-        console.log('[VMF] Mobile: search completed, switching to map view');
-        setTimeout(switchToMapView, 500);
+      // Detect when loading STARTS (loading goes from false to true)
+      // Switch to map view immediately to avoid flash of list view
+      if (lastLoading === false && v.loading === true) {
+        console.log('[VMF] Mobile: search started, switching to map view');
+        switchToMapView();
       }
       lastLoading = v.loading;
-    }, 250);
+    }, 100);
   }
 
   function startPolling() {
