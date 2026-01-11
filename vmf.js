@@ -1,6 +1,6 @@
-/* VMF assets v0.3.5 */
+/* VMF assets v0.3.6 */
 (() => {
-  const v = "v0.3.5";
+  const v = "v0.3.6";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.5';
+  var VERSION = 'VMF-AUTOHOOK v0.3.6';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -77,23 +77,25 @@
   }
 
   function getProximity(loc) {
-    if (!loc || loc.length < 2) return POLICY.TOWN;
+    if (!loc || loc.length < 2) return POLICY.OUTCODE; // Default to 5mi for unknown
     var locNorm = normalize(loc);
     console.log('[VMF] getProximity:', loc);
-    
+
     if (isFullPostcode(loc)) { console.log('[VMF] → Postcode:', POLICY.FULL_POSTCODE); return POLICY.FULL_POSTCODE; }
     if (isOutcode(loc)) { console.log('[VMF] → Outcode:', POLICY.OUTCODE); return POLICY.OUTCODE; }
-    
+
     // Check regions BEFORE cities (England contains London but should be 20mi)
     if (hasRegion(locNorm)) { console.log('[VMF] → Region:', POLICY.METRO_CAP); return POLICY.METRO_CAP; }
-    
+
     if (inList(locNorm, GREATER_METROS)) { console.log('[VMF] → Metro:', POLICY.METRO_CAP); return POLICY.METRO_CAP; }
     if (inList(locNorm, MAJOR_CITIES)) { console.log('[VMF] → Major:', POLICY.MAJOR_CITY); return POLICY.MAJOR_CITY; }
     if (inList(locNorm, LARGE_CITIES)) { console.log('[VMF] → Large:', POLICY.LARGE_CITY); return POLICY.LARGE_CITY; }
     if (inList(locNorm, SMALL_CITIES)) { console.log('[VMF] → Small:', POLICY.SMALL_CITY); return POLICY.SMALL_CITY; }
-    
-    console.log('[VMF] → Town:', POLICY.TOWN);
-    return POLICY.TOWN;
+
+    // Unknown place names (like "Isleworth, UK") get 5mi, not 8mi
+    // This is more appropriate for specific neighborhoods/areas vs actual towns
+    console.log('[VMF] → Local area:', POLICY.OUTCODE);
+    return POLICY.OUTCODE;
   }
 
   function checkAndRedirect() {
@@ -171,7 +173,7 @@
     return false;
   }
 
-  function handleLocationChange(loc) {
+  function handleLocationChange(loc, fromPacClick) {
     if (!loc || loc.length < 2) return;
     loc = loc.trim();
     if (loc === lastLocation) return;
@@ -184,6 +186,13 @@
       console.log('[VMF] Vue filters not found, will retry...');
       setTimeout(function() { setVueProximity(proximity); }, 100);
       setTimeout(function() { setVueProximity(proximity); }, 300);
+    }
+
+    // Mobile: Auto-trigger search when location looks like a Google Places selection
+    // Google Places always adds ", UK" or similar suffix
+    if (isMobile() && (fromPacClick || loc.indexOf(',') !== -1)) {
+      console.log('[VMF] Mobile: Google Places selection detected, triggering search');
+      setTimeout(triggerMobileSearch, 200);
     }
   }
 
