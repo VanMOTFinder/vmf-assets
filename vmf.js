@@ -1,6 +1,6 @@
-/* VMF assets v0.3.1 */
+/* VMF assets v0.3.2 */
 (() => {
-  const v = "v0.3.1";
+  const v = "v0.3.2";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.1';
+  var VERSION = 'VMF-AUTOHOOK v0.3.2';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -56,7 +56,9 @@
   function isOutcode(s) { return /^[A-Z]{1,2}\d[A-Z\d]?$/i.test(normalize(s).toUpperCase()); }
   
   function inList(loc, list) { 
-    loc = normalize(loc); 
+    loc = normalize(loc);
+    // Strip common suffixes from Google Places
+    loc = loc.replace(/,\s*(uk|united kingdom|england|scotland|wales|northern ireland)$/i, '').trim();
     for (var i = 0; i < list.length; i++) { 
       if (loc === list[i] || loc.indexOf(list[i]) === 0) return true; 
     } 
@@ -64,9 +66,12 @@
   }
   
   function hasRegion(loc) { 
-    loc = normalize(loc); 
+    loc = normalize(loc);
+    // Strip common suffixes from Google Places (e.g., 'Leeds, UK' -> 'Leeds')
+    loc = loc.replace(/,\s*(uk|united kingdom|england|scotland|wales|northern ireland)$/i, '').trim();
+    // Only match if location IS a region (not contains)
     for (var i = 0; i < REGIONS.length; i++) { 
-      if (loc === REGIONS[i] || loc.indexOf(REGIONS[i]) > -1) return true; 
+      if (loc === REGIONS[i]) return true; 
     } 
     return false; 
   }
