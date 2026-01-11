@@ -1,6 +1,6 @@
-/* VMF assets v0.3.4 */
+/* VMF assets v0.3.5 */
 (() => {
-  const v = "v0.3.4";
+  const v = "v0.3.5";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.4';
+  var VERSION = 'VMF-AUTOHOOK v0.3.5';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -240,16 +240,45 @@
 
   function hookPacItemClicks() {
     document.addEventListener('click', function(e) {
-      var pacItem = e.target.closest('.pac-item');
+      // Debug: log all clicks to see what's happening
+      var target = e.target;
+      var targetClasses = target.className || '';
+      var targetTag = target.tagName || '';
+
+      // Check if click is on or inside a PAC item
+      var pacItem = target.closest ? target.closest('.pac-item') : null;
+
+      // Also check parent elements manually for older browsers
+      if (!pacItem) {
+        var el = target;
+        while (el && el !== document.body) {
+          if (el.classList && el.classList.contains('pac-item')) {
+            pacItem = el;
+            break;
+          }
+          el = el.parentElement;
+        }
+      }
+
+      // Log clicks near PAC container for debugging
+      var pacContainer = target.closest ? target.closest('.pac-container') : null;
+      if (pacContainer || targetClasses.indexOf('pac-') !== -1) {
+        console.log('[VMF] Click near PAC:', targetTag, targetClasses.substring(0, 50));
+      }
+
       if (pacItem) {
-        console.log('[VMF] PAC item clicked');
+        console.log('[VMF] PAC item clicked!');
         setTimeout(function() {
           var inputs = findLocationInputs();
+          console.log('[VMF] Found', inputs.length, 'inputs after PAC click');
           for (var i = 0; i < inputs.length; i++) {
-            if (inputs[i].value && inputs[i].value.length > 2) {
-              handleLocationChange(inputs[i].value);
+            var val = inputs[i].value;
+            console.log('[VMF] Input', i, 'value:', val);
+            if (val && val.length > 2) {
+              handleLocationChange(val);
               // Mobile: auto-trigger search after autocomplete selection
               if (isMobile()) {
+                console.log('[VMF] Mobile: scheduling triggerMobileSearch');
                 setTimeout(triggerMobileSearch, 300);
               }
               break;
