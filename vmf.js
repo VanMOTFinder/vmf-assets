@@ -1,6 +1,6 @@
-/* VMF assets v0.2.9 */
+/* VMF assets v0.3.0 */
 (() => {
-  const v = "v0.2.9";
+  const v = "v0.3.0";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.2.9';
+  var VERSION = 'VMF-AUTOHOOK v0.3.0';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -118,7 +118,190 @@
     }
   }
 
+  // ============ VUE.JS AJAX INTERCEPTION ============
+
+  var lastLocation = '';
+  var hooked = false;
+
+  function getVueFilters() {
+    var selectors = ['.explore-filters', '[data-explore-filters]', '.explore-head'];
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el && el.__vue__ && el.__vue__.filters) {
+        return el.__vue__.filters;
+      }
+      if (el && el.__vue__ && el.__vue__.$parent && el.__vue__.$parent.filters) {
+        return el.__vue__.$parent.filters;
+      }
+    }
+    return null;
+  }
+
+  function setVueProximity(miles) {
+    var filters = getVueFilters();
+    if (filters && filters.proximity !== undefined) {
+      if (Math.round(filters.proximity) !== Math.round(miles)) {
+        console.log('[VMF] Setting Vue proximity:', miles, '(was:', filters.proximity + ')');
+        filters.proximity = miles;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function handleLocationChange(loc) {
+    if (!loc || loc.length < 2) return;
+    loc = loc.trim();
+    if (loc === lastLocation) return;
+    lastLocation = loc;
+    var proximity = getProximity(loc);
+    console.log('[VMF] Location changed:', loc, '->', proximity + 'mi');
+    if (setVueProximity(proximity)) {
+      console.log('[VMF] Vue proximity updated');
+    } else {
+      console.log('[VMF] Vue filters not found, will retry...');
+      setTimeout(function() { setVueProximity(proximity); }, 100);
+      setTimeout(function() { setVueProximity(proximity); }, 300);
+    }
+  }
+
+  function findLocationInputs() {
+    return document.querySelectorAll([
+      'input[name="search_location"]',
+      'input[name="location"]',
+      '.explore-location input',
+      '.pac-target-input',
+      'input.location-field',
+      'input[placeholder*="town"]',
+      'input[placeholder*="postcode"]',
+      'input[placeholder*="location"]'
+    ].join(','));
+  }
+
+  function hookInput(input) {
+    if (input._vmfHooked) return;
+    input._vmfHooked = true;
+    console.log('[VMF] Hooking input:', input.name || input.className || 'unknown');
+    input.addEventListener('blur', function() {
+      setTimeout(function() { handleLocationChange(input.value); }, 50);
+    });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.keyCode === 13) {
+        setTimeout(function() { handleLocationChange(input.value); }, 100);
+      }
+    });
+    if (window.google && window.google.maps && window.google.maps.places) {
+      hookGoogleAutocomplete(input);
+    }
+  }
+
+  function hookGoogleAutocomplete(input) {
+    var checkAutocomplete = function() {
+      if (input.gm_accessors_ && input.gm_accessors_.place) {
+        console.log('[VMF] Found Google Autocomplete on input');
+        var pacObserver = new MutationObserver(function() {
+          setTimeout(function() {
+            if (input.value && input.value !== lastLocation) {
+              handleLocationChange(input.value);
+            }
+          }, 150);
+        });
+        var pacContainer = document.querySelector('.pac-container');
+        if (pacContainer) {
+          pacObserver.observe(pacContainer, { childList: true, subtree: true, attributes: true });
+        }
+      }
+    };
+    setTimeout(checkAutocomplete, 500);
+    setTimeout(checkAutocomplete, 1500);
+  }
+
+  function hookPacItemClicks() {
+    document.addEventListener('click', function(e) {
+      var pacItem = e.target.closest('.pac-item');
+      if (pacItem) {
+        console.log('[VMF] PAC item clicked');
+        setTimeout(function() {
+          var inputs = findLocationInputs();
+          for (var i = 0; i < inputs.length; i++) {
+            if (inputs[i].value && inputs[i].value.length > 2) {
+              handleLocationChange(inputs[i].value);
+              break;
+            }
+          }
+        }, 200);
+      }
+    }, true);
+  }
+
+  function startPolling() {
+    var pollInterval = 500;
+    var lastValues = {};
+    setInterval(function() {
+      var inputs = findLocationInputs();
+      for (var i = 0; i < inputs.length; i++) {
+        var input = inputs[i];
+        var id = input.name || input.id || 'input_' + i;
+        var val = input.value;
+        if (val && val.length > 2 && val !== lastValues[id]) {
+          lastValues[id] = val;
+          (function(v) {
+            setTimeout(function() {
+              if (input.value === v) { handleLocationChange(v); }
+            }, 300);
+          })(val);
+        }
+      }
+    }, pollInterval);
+  }
+
+  function hookAllInputs() {
+    var inputs = findLocationInputs();
+    console.log('[VMF] Found', inputs.length, 'location inputs');
+    for (var i = 0; i < inputs.length; i++) { hookInput(inputs[i]); }
+  }
+
+  function initAjaxInterception() {
+    if (hooked) return;
+    hooked = true;
+    console.log('[VMF] Initializing AJAX interception...');
+    hookAllInputs();
+    hookPacItemClicks();
+    startPolling();
+    var observer = new MutationObserver(function(mutations) {
+      var shouldRehook = false;
+      for (var i = 0; i < mutations.length; i++) {
+        if (mutations[i].addedNodes.length > 0) {
+          for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+            var node = mutations[i].addedNodes[j];
+            if (node.nodeType === 1) {
+              if (node.tagName === 'INPUT' || node.querySelector && node.querySelector('input')) {
+                shouldRehook = true;
+                break;
+              }
+            }
+          }
+        }
+        if (shouldRehook) break;
+      }
+      if (shouldRehook) { setTimeout(hookAllInputs, 100); }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    console.log('[VMF] AJAX interception ready');
+  }
+
+  // ============ BOOT ============
+
   console.log('[VMF] Boot:', VERSION);
   checkAndRedirect();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(initAjaxInterception, 500); });
+  } else {
+    setTimeout(initAjaxInterception, 500);
+  }
+  window.addEventListener('load', function() {
+    setTimeout(initAjaxInterception, 1000);
+    setTimeout(hookAllInputs, 2000);
+  });
   console.log('[VMF] Boot complete');
 })();
