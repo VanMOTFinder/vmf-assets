@@ -1,6 +1,6 @@
-/* VMF assets v0.3.2 */
+/* VMF assets v0.3.3 */
 (() => {
-  const v = "v0.3.2";
+  const v = "v0.3.3";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.2';
+  var VERSION = 'VMF-AUTOHOOK v0.3.3';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -248,12 +248,177 @@
           for (var i = 0; i < inputs.length; i++) {
             if (inputs[i].value && inputs[i].value.length > 2) {
               handleLocationChange(inputs[i].value);
+              // Mobile: auto-trigger search after autocomplete selection
+              if (isMobile()) {
+                setTimeout(triggerMobileSearch, 300);
+              }
               break;
             }
           }
         }, 200);
       }
     }, true);
+  }
+
+  // ============ MOBILE-SPECIFIC FEATURES (v0.3.3) ============
+
+  function isMobile() {
+    // Check viewport width first (most reliable)
+    if (window.innerWidth <= 768) return true;
+    // Also check Vue's isMobile state
+    var main = document.querySelector('#c27-explore-listings');
+    if (main && main.__vue__ && main.__vue__.isMobile) return true;
+    return false;
+  }
+
+  function getExploreVue() {
+    var main = document.querySelector('#c27-explore-listings');
+    return main && main.__vue__ ? main.__vue__ : null;
+  }
+
+  function triggerMobileSearch() {
+    if (!isMobile()) return;
+    console.log('[VMF] Mobile: triggering search...');
+
+    // Method 1: Click the search button
+    var searchBtn = document.querySelector([
+      '.explore-head-search button[type="submit"]',
+      '.explore-head-search .btn',
+      'button:contains("Search")',
+      '.explore-mobile-nav button',
+      '.search-submit'
+    ].join(','));
+
+    if (!searchBtn) {
+      // Try text-based search for button
+      var buttons = document.querySelectorAll('button, .btn, [type="submit"]');
+      for (var i = 0; i < buttons.length; i++) {
+        var text = (buttons[i].textContent || '').toLowerCase().trim();
+        if (text === 'search' || text.indexOf('search') === 0) {
+          searchBtn = buttons[i];
+          break;
+        }
+      }
+    }
+
+    if (searchBtn) {
+      console.log('[VMF] Mobile: clicking search button');
+      searchBtn.click();
+      // After search triggers, switch to map view
+      setTimeout(switchToMapView, 1500);
+      setTimeout(switchToMapView, 3000);
+      return;
+    }
+
+    // Method 2: Call Vue's getListings method directly
+    var vue = getExploreVue();
+    if (vue) {
+      // Try common method names
+      var searchMethods = ['getListings', 'fetchListings', 'doSearch', 'search', 'submitSearch'];
+      for (var j = 0; j < searchMethods.length; j++) {
+        if (typeof vue[searchMethods[j]] === 'function') {
+          console.log('[VMF] Mobile: calling Vue.' + searchMethods[j] + '()');
+          try {
+            vue[searchMethods[j]]();
+            setTimeout(switchToMapView, 1500);
+            setTimeout(switchToMapView, 3000);
+            return;
+          } catch (err) {
+            console.log('[VMF] Error calling', searchMethods[j], err);
+          }
+        }
+      }
+
+      // Method 3: Trigger form submit event
+      var form = document.querySelector('.explore-head-search form, form.search-form');
+      if (form) {
+        console.log('[VMF] Mobile: submitting search form');
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        setTimeout(switchToMapView, 1500);
+        setTimeout(switchToMapView, 3000);
+        return;
+      }
+    }
+
+    console.log('[VMF] Mobile: could not find search trigger');
+  }
+
+  function switchToMapView() {
+    if (!isMobile()) return;
+
+    var vue = getExploreVue();
+    if (!vue) {
+      console.log('[VMF] Mobile: Vue instance not found');
+      return;
+    }
+
+    // Check current state
+    var currentTab = vue.state && vue.state.mobileTab;
+    if (currentTab === 'map') {
+      console.log('[VMF] Mobile: already in map view');
+      return;
+    }
+
+    console.log('[VMF] Mobile: switching to map view (current:', currentTab, ')');
+
+    // Method 1: Set Vue state directly
+    if (vue.state && typeof vue.state.mobileTab !== 'undefined') {
+      vue.state.mobileTab = 'map';
+      console.log('[VMF] Mobile: set state.mobileTab = "map"');
+      // Trigger reactivity if needed
+      if (vue.$forceUpdate) {
+        try { vue.$forceUpdate(); } catch (e) {}
+      }
+      return;
+    }
+
+    // Method 2: Click the map view button
+    var mapBtn = document.querySelector('.show-map a, .show-map, [class*="map-view"]');
+    if (!mapBtn) {
+      // Search by text
+      var links = document.querySelectorAll('a, li, button');
+      for (var i = 0; i < links.length; i++) {
+        var text = (links[i].textContent || '').trim().toLowerCase();
+        if (text === 'map view' || text === 'map') {
+          mapBtn = links[i];
+          break;
+        }
+      }
+    }
+
+    if (mapBtn) {
+      console.log('[VMF] Mobile: clicking map view button');
+      mapBtn.click();
+      return;
+    }
+
+    console.log('[VMF] Mobile: could not switch to map view');
+  }
+
+  // Watch for search results and auto-switch to map view
+  function watchForResults() {
+    if (!isMobile()) return;
+
+    var vue = getExploreVue();
+    if (!vue) {
+      setTimeout(watchForResults, 1000);
+      return;
+    }
+
+    // Watch for loading state changes
+    var lastLoading = vue.loading;
+    setInterval(function() {
+      if (!isMobile()) return;
+      var v = getExploreVue();
+      if (!v) return;
+
+      // Detect when loading finishes (loading goes from true to false)
+      if (lastLoading === true && v.loading === false) {
+        console.log('[VMF] Mobile: search completed, switching to map view');
+        setTimeout(switchToMapView, 500);
+      }
+      lastLoading = v.loading;
+    }, 250);
   }
 
   function startPolling() {
@@ -290,6 +455,11 @@
     hookAllInputs();
     hookPacItemClicks();
     startPolling();
+    // Mobile: watch for search results to auto-switch to map view
+    if (isMobile()) {
+      console.log('[VMF] Mobile mode detected, enabling auto-map-view');
+      watchForResults();
+    }
     var observer = new MutationObserver(function(mutations) {
       var shouldRehook = false;
       for (var i = 0; i < mutations.length; i++) {
