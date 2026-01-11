@@ -1,6 +1,6 @@
-/* VMF assets v0.3.6 */
+/* VMF assets v0.3.7 */
 (() => {
-  const v = "v0.3.6";
+  const v = "v0.3.7";
   window.VMF_ASSET_VERSION = v;
   console.log(`[VMF] assets ${v}`);
   try {
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'VMF-AUTOHOOK v0.3.6';
+  var VERSION = 'VMF-AUTOHOOK v0.3.7';
   if (window.__VMF_AUTOHOOK__ === VERSION) return;
   window.__VMF_AUTOHOOK__ = VERSION;
   console.log('[VMF] AUTOHOOK:', VERSION);
@@ -322,6 +322,24 @@
     if (!vue) {
       console.log('[VMF] Mobile: Vue instance not found');
       return;
+    }
+
+    // Get the location value from the input
+    var inputs = findLocationInputs();
+    var locationValue = '';
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].value && inputs[i].value.length > 2) {
+        locationValue = inputs[i].value;
+        break;
+      }
+    }
+    console.log('[VMF] Mobile: location value:', locationValue);
+
+    // Set the search_location filter on Vue before calling getListings
+    var filters = getVueFilters();
+    if (filters && locationValue) {
+      console.log('[VMF] Mobile: setting filters.search_location');
+      filters.search_location = locationValue;
     }
 
     // IMPORTANT: Switch to map view FIRST to avoid flash of list view
